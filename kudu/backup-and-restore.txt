@@ -1,0 +1,95 @@
+BACKUP AND RESTORE
+https://kudu.apache.org/docs/administration.html#backup
+
+**Yes — absolutely possible.**
+Not blocking, but **latency can increase**.
+
+Here’s the precise reason, tied to Kudu internals:
+
+---
+
+### Why full backups can hurt live reads/writes
+
+A **full backup = Spark job scanning every tablet**.
+
+That means:
+
+* **Heavy read pressure** on all tablet leaders/followers
+* **CPU contention**
+* **Disk I/O contention**
+* **Memory pressure** (block cache, scan buffers)
+
+Kudu does **not lock tables**, but resources are shared.
+
+---
+
+### Impact on WRITES
+
+* Writes still go to tablet **leaders**
+* But leaders are now also:
+
+  * Serving scan reads
+  * Replicating Raft logs
+* Result:
+
+  * Higher write latency
+  * Raft commit delays
+  * Possible queueing behind read work
+
+Writes are **never blocked**, but **can be delayed**.
+
+---
+
+### Impact on READS
+
+* Backup scans consume:
+
+  * Scan tokens
+  * Disk bandwidth
+  * CPU
+* Other queries may:
+
+  * Start slower
+  * Run slower
+  * Compete for scan slots
+
+Large analytical reads suffer the most.
+
+---
+
+### Why this gets worse with “huge tables”
+
+* Every tablet is scanned
+* Backup is long-running
+* Contention lasts for a long time
+* Repeated every few hours → near-continuous pressure
+
+---
+
+### What Kudu docs imply (key rule of thumb)
+
+> *Tablets limit parallelism*
+
+So:
+
+* Backup uses **all tablets**
+* Leaves fewer cycles for user workloads
+
+---
+
+### Mitigations (important in practice)
+
+* Prefer **incremental backups** after first full
+* Schedule full backups during **low-traffic windows**
+* Limit Spark parallelism for backup jobs
+* Use **follower reads** if possible
+* Ensure tablet count ≈ core count (avoid oversubscription)
+
+---
+
+### Clear bottom line
+
+> **Full backups do not block reads/writes, but they *do* compete for the same resources — so latency spikes are expected for large, frequent full backups.**
+
+If you want, I can tell you **exactly which Kudu metrics will show this contention** (very useful for proving it in production).
+
