@@ -1,0 +1,17 @@
+In server A as user A1
+---------- Check contents of .ssh directory before doing following ----------
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+Passphrase >> PRESS ENTER
+This creates private key (~/.ssh/id_ed25519) and public key (~/.ssh/id_ed25519.pub)
+
+In server B as user B1
+---------- Check contents of .ssh directory before doing following ----------
+mkdir -p ~/.ssh
+---------- Check mod on ~/.ssh before doing following ----------
+chmod 700 ~/.ssh
+--------------------- use append (>>) not overwrite (>) --------------------------
+echo "<contents of id_ed25519.pub>" >> ~/.ssh/authorized_keys
+---------- Check mod on ~/.ssh/authorized_keys before doing following ----------
+chmod 600 ~/.ssh/authorized_keys
+
+Check scp from shell script once this is done
